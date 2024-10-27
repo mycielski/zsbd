@@ -8,7 +8,7 @@
 -- These commands were put in this file only as a convenience.
 -- 
 -- object: eltrans | type: DATABASE --
-DROP DATABASE IF EXISTS eltrans;
+-- DROP DATABASE IF EXISTS eltrans;
 CREATE DATABASE eltrans;
 -- ddl-end --
 
@@ -91,7 +91,7 @@ ALTER TABLE public.driver OWNER TO postgres;
 -- DROP TABLE IF EXISTS public.sale CASCADE;
 CREATE TABLE public.sale (
 	cost decimal NOT NULL,
-	currency_code char NOT NULL,
+	currency_code char(3) NOT NULL,
 	location varchar,
 	card_id smallint NOT NULL,
 	vendor_id smallint NOT NULL,

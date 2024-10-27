@@ -92,7 +92,7 @@ def generate_fake_data():
         num_measurements = int(duration / 3) + 1
         fuel_level = fuel_capacity  # Start at full capacity
 
-        for i in tqdm(range(num_measurements)):
+        for i in range(num_measurements):
             timestamp = start_time + timedelta(seconds=i * 3)
 
             # Simulate fuel level decreasing linearly
@@ -123,7 +123,7 @@ def generate_fake_data():
 
 
                 fuel_type = 1  # Diesel
-                refuel_amount = refuel_amount + (50 if index == 5 else 0)  # Add 50 liters to the 6th trip to simulate fraud
+                refuel_amount = refuel_amount + (50 * random.normalvariate(0.9, 0.1) if index in [5, 15, 30] else 0)  # Add 50 liters to the 6th trip to simulate fraud
                 sale = Sale(
                     cost=round(refuel_amount * 1.5 * random.normalvariate(1, 0.1), 2),  # 1.5 EUR per liter
                     currency_code='EUR',
