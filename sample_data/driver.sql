@@ -46,3 +46,6 @@ LIMIT 25;  -- This will create 25 drivers
 SELECT id, first_name, last_name, is_active 
 FROM public.driver 
 ORDER BY id;
+
+insert into public.driver (first_name, last_name, is_active)
+values ('Tomasz', 'Mycielski', false);
