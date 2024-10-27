@@ -1,0 +1,18 @@
+version: 2
+
+sources:
+  - name: eltrans
+    database: eltrans
+    schema: public
+    tables:
+      - name: trip
+      - name: vehicle
+      - name: measurement
+      - name: trailer
+      - name: driver
+      - name: sale
+      - name: card
+      - name: vendor
+      - name: fuel_type
+      - name: vehicle_type
+
