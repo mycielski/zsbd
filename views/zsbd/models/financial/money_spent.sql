@@ -20,7 +20,7 @@ named_spending AS (
     d.last_name,
     d.id,
     ds.total
-  FROM driver AS d
+  FROM {{ source("eltrans", "driver") }} AS d
   INNER JOIN driver_spendings AS ds ON d.id = ds.driver_id
 )
 

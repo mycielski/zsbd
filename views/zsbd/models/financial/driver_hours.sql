@@ -21,7 +21,7 @@ named_hours AS (
     ah.hours_driven,
     ah.driver_id
   FROM aggregate_hours ah
-  JOIN driver d
+  JOIN {{ source("eltrans", "driver") }} d
     ON d.id=ah.driver_id
 )
 
