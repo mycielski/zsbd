@@ -4,11 +4,11 @@
 
 ## Case study: Firma transportowa Eltrans
 
-Eltrans to prężnie działająca firma transportowa, operująca zarówno na rynku krajowym, jak i międzynarodowym. Firma dysponuje zróżnicowaną flotą liczącą około 300 pojazdów, z czego większość stanowią tiry, uzupełnione o samochody osobowe i vany. Eltrans zatrudnia kilkuset pracowników, w większości kierowców, lecz także personel administracyjny, mechaników oraz specjalistów ds. logistyki.
+Eltrans to prężnie działająca firma transportowa, operująca zarówno na rynku krajowym, jak i międzynarodowym. Firma dysponuje liczną flotą, z czego większość stanowią tiry. Eltrans zatrudnia wielu pracowników, w większości kierowców, lecz także personel administracyjny, mechaników oraz specjalistów ds. logistyki.
 
-Głównym wyzwaniem dla Eltrans jest efektywne zarządzanie zróżnicowaną flotą pojazdów i licznym personelem. Firma potrzebuje narzędzia do monitorowania wydajności, optymalizacji tras, kontroli kosztów oraz wykrywania nadużyć (fraudów). Dodatkowo, Eltrans chce wzmocnić swoje możliwości analityczne, aby podejmować trafniejsze decyzje biznesowe oparte na danych.
+Głównym wyzwaniem dla Eltrans jest efektywne zarządzanie flotą pojazdów i personelem. Firma potrzebuje narzędzia do monitorowania wydajności, optymalizacji tras, kontroli kosztów oraz wykrywania nadużyć (fraudów). Dodatkowo, Eltrans chce wzmocnić swoje możliwości analityczne, aby podejmować trafniejsze decyzje biznesowe oparte na danych.
 
-Baza danych, która ma usprawnić działanie firmy, będzie centralnym punktem gromadzenia i analizy informacji o pracownikach, pojazdach (z uwzględnieniem ich typów), trasach i historycznym stanie pojazdów podczas całego cyklu ich eksploatacji. Dzięki niej, Eltrans będzie w stanie:
+Baza danych, która ma usprawnić działanie firmy, będzie centralnym punktem gromadzenia i analizy informacji o pracownikach, pojazdach, trasach i historycznym stanie pojazdów podczas całego cyklu ich eksploatacji. Dzięki niej, Eltrans będzie w stanie:
 
 - Analizować pracę kierowców
 - Monitorować wykorzystanie pojazdów
@@ -90,11 +90,9 @@ TODO
 
 Do wygenerowania danych wykorzystałem własne skrypty SQL i Python. Aby zwiększyć realizm danych wielokrotnie wykorzystywałem losowanie z rozkładu normalnego (na przykład do generowania cen paliwa). Na szczególną uwagę zasługuje program, który generuje pomiary poziomu paliwa podczas przejazdów samochodów oraz zapisy transakcji zakupu paliwa dokonanych przez kierowców gdy poziom był niski.
 
-Wykres pomiarów paliwa w czasie dla jednego z przejazdów:
+![Wykres pomiarów paliwa w czasie dla jednego z przejazdów](sample_data/fuel_plot.png){width=50%}
 
-![](sample_data/fuel_plot.png)
-
-Widoczny na wykresie szum został wprowadzony celowo w celu symulacji niedokładności przyrządów pomiarowych oraz zmiennego spalania pojazdu podczas podróży.
+Widoczny na wykresie szum został wprowadzony do danych celowo w celu symulacji niedokładności przyrządów pomiarowych oraz zmiennego spalania pojazdu podczas podróży.
 
 ## Użytkownicy
 TODO
@@ -140,7 +138,23 @@ GROUP BY ft.name;
 ## Perspektywy
 
 ### Wykrywanie fraudów
-TODO
+
+Kierowcy kupują paliwo na stacjach paliw przy użyciu firmowych kart flotowych. Kierowca może próbować zatankować część paliwa do własnego kanistra aby w ten sposób "dorobić" sobie bonus do pensji. Jest to oczywiście kradzież. W celu jej wykrywania stworzone zostały perspketywy.
+
+![Lineage graph fraudsterów](lineage_graphs/suspected_fraudsters.png)
+
+```sql
+SELECT * FROM reported_refuelings;
+SELECT * FROM measured_refuelings;
+SELECT * FROM suspected_fraudsters;
+```
+
+![Tankowania zarejestrowane w systemach dostawców paliwa](query_results/reported_refuelings.png)
+
+![Tankowania wykryte w odczytach z sensorów poziomu paliwa w samochodzie](query_results/measured_refuelings.png)
+
+![Wykryte kradzieże paliwa](query_results/suspected_fraudsters.png)
+
 
 ### Spalanie pojazdu na godzinę jazdy
 TODO
