@@ -288,3 +288,7 @@ W obu tabelach utworzono indeksy typu hash na kolumnach z numerami rejestracyjny
 ## Benchmark
 
 Bez indeksu na kolumnie `timestamp` w `measurement` wykonanie zapytania `SELECT min(m.timestamp) FROM measurement m` zajmowało około 900 milisekund. Po dodaniu indeksu btree na tę kolumnę czas wykonania tego zapytania spadł do 12 milisekund! To redukcja o niemal **99%**!
+
+---
+
+[Repozytorium: `https://github.com/mycielski/zsbd_1`](https://github.com/mycielski/zsbd_1)
