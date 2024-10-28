@@ -1,26 +1,26 @@
-WITH measurements AS (
-  SELECT
-    fuel_level,
+WITH consecutive_measurements AS (
+  SELECT 
     vehicle_id,
-    timestamp
-  FROM {{ source("eltrans", "measurement") }}
-),
-
-fuel_leaps AS (
-  SELECT
-    l.vehicle_id,
-    l.timestamp
-  FROM measurements AS l
-  INNER JOIN measurement AS r ON l.timestamp + INTERVAL '3 seconds' = r.timestamp
-  WHERE l.fuel_level * 2 < r.fuel_level
-),
-
-refueling_timestamps AS (
-  SELECT
-    timestamp,
-    vehicle_id
-  FROM fuel_leaps
+    "timestamp",
+    fuel_level,
+    LEAD(fuel_level) OVER (PARTITION BY vehicle_id ORDER BY "timestamp") as next_fuel_level,
+    LEAD("timestamp") OVER (PARTITION BY vehicle_id ORDER BY "timestamp") as next_timestamp
+  FROM {{ source('eltrans', 'measurement') }}
 )
 
-SELECT * FROM refueling_timestamps
+SELECT 
+  vehicle_id,
+  "timestamp" as refuel_timestamp,
+  fuel_level as pre_refuel_level,
+  next_fuel_level as post_refuel_level,
+  (next_fuel_level - fuel_level) as fuel_added,
+  ROUND(((next_fuel_level - fuel_level) / NULLIF(fuel_level, 0) * 100)::numeric, 2) as percentage_increase,
+  EXTRACT(EPOCH FROM (next_timestamp - "timestamp"))/60 as minutes_between_readings
+FROM consecutive_measurements
+WHERE 
+  next_fuel_level > fuel_level
+  AND fuel_level > 0  -- Avoid division by zero
+  AND ((next_fuel_level - fuel_level) / fuel_level) > 0.30  -- 30% increase threshold
+  AND (next_timestamp - "timestamp") < INTERVAL '30 minutes'  -- Time window threshold
+ORDER BY vehicle_id, "timestamp"
 
