@@ -9,9 +9,10 @@ WITH sales AS (
 driver_spendings AS (
   SELECT
     c.owner_id AS driver_id,
-    s.total
+    sum(s.total) AS total
   FROM card AS c
   INNER JOIN sales AS s ON c.id = s.card_id
+  GROUP BY driver_id
 ),
 
 named_spending AS (
