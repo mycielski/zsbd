@@ -57,7 +57,7 @@ names AS (
     f.timestamp,
     ROUND(CAST(f.fuel_volume_discrepancy AS numeric), 2) AS fuel_stolen
   FROM frauds AS f
-    JOIN {{ source("eltrans", "driver") }} AS d ON f.driver_id = d.id
+  INNER JOIN {{ source("eltrans", "driver") }} AS d ON f.driver_id = d.id
 )
 
 SELECT * FROM names

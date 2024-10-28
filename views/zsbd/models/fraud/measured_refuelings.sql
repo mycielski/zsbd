@@ -34,7 +34,7 @@ vehicle_refuelings AS (
     mr.fuel_added,
     v.number_plate AS vehicle_reg
   FROM measured_refuelings AS mr
-    JOIN {{ source("eltrans", "vehicle") }} AS v ON mr.vehicle_id = v.id
+  INNER JOIN {{ source("eltrans", "vehicle") }} AS v ON mr.vehicle_id = v.id
 )
 
 SELECT
