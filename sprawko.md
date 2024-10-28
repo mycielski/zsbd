@@ -35,6 +35,8 @@ Screenshoty z działającego Postgresa:
 
 ## Implementacja bazy danych
 
+Kod, który nie został umieszczony w tym sprawozdaniu dostępny jest na [GitHub](https://github.com/mycielski/zsbd_1).
+
 ### Schemat logiczny
 
 [![](case_study/baza-erd.png)
@@ -291,4 +293,3 @@ Bez indeksu na kolumnie `timestamp` w `measurement` wykonanie zapytania `SELECT 
 
 ---
 
-[Repozytorium: `https://github.com/mycielski/zsbd_1`](https://github.com/mycielski/zsbd_1)
