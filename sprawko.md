@@ -81,12 +81,23 @@ Wszystkie tabele są w jednym schemacie bazodanowym.
 2. `fuel_type`
 
 ## Odstępstwa od 3NF
+TODO
 
 ## Istotne decyzje projektowe
+TODO
 
 ## Generowanie danych
 
+Do wygenerowania danych wykorzystałem własne skrypty SQL i Python. Aby zwiększyć realizm danych wielokrotnie wykorzystywałem losowanie z rozkładu normalnego (na przykład do generowania cen paliwa). Na szczególną uwagę zasługuje program, który generuje pomiary poziomu paliwa podczas przejazdów samochodów oraz zapisy transakcji zakupu paliwa dokonanych przez kierowców gdy poziom był niski.
+
+Wykres pomiarów paliwa w czasie dla jednego z przejazdów:
+
+![](sample_data/fuel_plot.png)
+
+Widoczny na wykresie szum został wprowadzony celowo w celu symulacji niedokładności przyrządów pomiarowych oraz zmiennego spalania pojazdu podczas podróży.
+
 ## Użytkownicy
+TODO
 
 ## Przykładowe zapytania
 
@@ -113,7 +124,7 @@ W tym zapytaniu wykorzystane zostało **podzapytanie**.
 
 ```sql
 SELECT ft.name AS "Nazwa paliwa",
-       ROUND(CAST(sum(fuel_amount) / sum(cost) AS numeric), 2) AS "Cena paliwa [EUR]"
+       ROUND(CAST(sum(cost) / sum(fuel_amount) AS numeric), 2) AS "Cena paliwa [EUR]"
 FROM sale s
 JOIN fuel_type ft ON ft.id = s.fuel_type_id
 WHERE vendor_id IN
@@ -129,8 +140,11 @@ GROUP BY ft.name;
 ## Perspektywy
 
 ### Wykrywanie fraudów
+TODO
 
-### TODO: drugi view
+### Spalanie pojazdu na godzinę jazdy
+TODO
+
 
 ## Indeksy
 

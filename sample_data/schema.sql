@@ -92,7 +92,6 @@ ALTER TABLE public.driver OWNER TO postgres;
 CREATE TABLE public.sale (
 	cost decimal NOT NULL,
 	currency_code char(3) NOT NULL,
-	location varchar,
 	card_id smallint NOT NULL,
 	vendor_id smallint NOT NULL,
 	id smallint NOT NULL GENERATED ALWAYS AS IDENTITY ,
@@ -164,7 +163,8 @@ CREATE INDEX source ON public.trip
 USING hash
 (
 	source
-);
+)
+INCLUDE (source);
 -- ddl-end --
 
 -- object: destination | type: INDEX --
@@ -175,6 +175,53 @@ USING hash
 	destination
 )
 INCLUDE (destination);
+-- ddl-end --
+
+-- object: country | type: INDEX --
+-- DROP INDEX IF EXISTS public.country CASCADE;
+CREATE INDEX country ON public.vendor
+USING hash
+(
+	country
+);
+-- ddl-end --
+
+-- object: cost | type: INDEX --
+-- DROP INDEX IF EXISTS public.cost CASCADE;
+CREATE INDEX cost ON public.sale
+USING btree
+(
+	cost
+)
+INCLUDE (cost,fuel_amount,vendor_id);
+-- ddl-end --
+
+-- object: name | type: INDEX --
+-- DROP INDEX IF EXISTS public.name CASCADE;
+CREATE INDEX name ON public.driver
+USING btree
+(
+	first_name,
+	last_name
+);
+-- ddl-end --
+
+-- object: trailer_plate | type: INDEX --
+-- DROP INDEX IF EXISTS public.trailer_plate CASCADE;
+CREATE INDEX trailer_plate ON public.trailer
+USING hash
+(
+	number_plate
+);
+-- ddl-end --
+
+-- object: vehicle_plate | type: INDEX --
+-- DROP INDEX IF EXISTS public.vehicle_plate CASCADE;
+CREATE INDEX vehicle_plate ON public.vehicle
+USING hash
+(
+	number_plate
+);
 -- ddl-end --
 
 -- object: vehicle | type: CONSTRAINT --
