@@ -80,4 +80,78 @@ Wszystkie tabele są w jednym schemacie bazodanowym.
 1. `vehicle_type`
 2. `fuel_type`
 
+## Odstępstwa od 3NF
 
+## Istotne decyzje projektowe
+
+## Generowanie danych
+
+## Użytkownicy
+
+## Przykładowe zapytania
+
+### Którzy kierowcy wykonali najwięcej tras w danym miesiącu?
+
+```sql
+SELECT driver.first_name,
+       driver.last_name,
+       count(*) AS trips_taken
+FROM driver
+JOIN trip ON driver.id=trip.driver_id
+WHERE trip.start_time>='2024-01-01'
+  AND trip.end_time<'2024-02-01'
+GROUP BY driver.first_name,
+         driver.last_name
+ORDER BY trips_taken DESC
+LIMIT 10;
+```
+![](query_results/top_drivers.png)
+
+### Jaka jest średnia cena oleju napędowego w Polsce?
+
+W tym zapytaniu wykorzystane zostało **podzapytanie**.
+
+```sql
+SELECT ft.name AS "Nazwa paliwa",
+       ROUND(CAST(sum(fuel_amount) / sum(cost) AS numeric), 2) AS "Cena paliwa [EUR]"
+FROM sale s
+JOIN fuel_type ft ON ft.id = s.fuel_type_id
+WHERE vendor_id IN
+    (SELECT id
+     FROM vendor
+     WHERE country = 'Poland')
+  AND ft.name = 'diesel'
+GROUP BY ft.name;
+```
+
+![](query_results/diesel_price.png)
+
+## Perspektywy
+
+### Wykrywanie fraudów
+
+### TODO: drugi view
+
+## Indeksy
+
+W bazie stworzyłem indeksy aby przyspieszyć niektóre zapytania. Tam, gdzie zapytania mają formę przyrównania do konkretnej wartości (na przykład numer rejestracyjny) wykorzystany został indeks typu hash. W przeciwnym wypadku, oraz w indekach złożonych z kilku kolumn, wykorzystałem indeks btree.
+
+### `trip`
+
+Utworzone zostały indeksy typu hash na kolumnach `source` i `destination` aby przyspieszyć zapytania o miejsca, gdzie jeżdżą pojazdy.
+
+### `vendor`
+
+Utworzony został indeks typu hash na kolumnie `country` aby przyspieszyć zapytania o kraje w których zarejestrowane są działaności dostawców paliwa.
+
+### `sale`
+
+Utworzony został indeks btree na kolumnie `cost` zawierający wartości `cost`, `fuel_amount` i `vendor_id` aby przyspieszyć zapytania o średnie ceny paliwa u dostawców.
+
+### `driver`
+
+Utworzony został indeks złożony typu btree na kolumnach `first_name` i `last_name` aby przyspieszyć zapytania o kierowców przy użyciu ich imion (w przeciwieństwie do ich `id`).
+
+### `vehicle` i `trailer`
+
+W obu tabelach utworzono indeksy typu hash na kolumnach z numerami rejestracyjnymi.

@@ -42,6 +42,7 @@ class Sale(Base):
     vendor_id = Column(Integer, ForeignKey('vendor.id'), nullable=False)
     fuel_amount = Column(Float)
     fuel_type_id = Column(Integer, ForeignKey('fuel_type.id'))
+    timestamp = Column(DateTime, nullable=False)
 
 
 class Vehicle(Base):
@@ -131,7 +132,8 @@ def generate_fake_data():
                     location=vendor_country,
                     vendor_id=vendor_id,
                     fuel_amount=round(refuel_amount, 2),
-                    fuel_type_id=fuel_type
+                    fuel_type_id=fuel_type,
+                    timestamp=timestamp+timedelta(seconds=1)
                 )
 
                 session.add(sale)

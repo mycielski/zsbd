@@ -98,6 +98,7 @@ CREATE TABLE public.sale (
 	id smallint NOT NULL GENERATED ALWAYS AS IDENTITY ,
 	fuel_amount float,
 	fuel_type_id smallint,
+	"timestamp" timestamp NOT NULL,
 	CONSTRAINT "SALE_pk" PRIMARY KEY (id)
 );
 -- ddl-end --
@@ -155,6 +156,25 @@ CREATE TABLE public.vehicle_type (
 );
 -- ddl-end --
 ALTER TABLE public.vehicle_type OWNER TO postgres;
+-- ddl-end --
+
+-- object: source | type: INDEX --
+-- DROP INDEX IF EXISTS public.source CASCADE;
+CREATE INDEX source ON public.trip
+USING hash
+(
+	source
+);
+-- ddl-end --
+
+-- object: destination | type: INDEX --
+-- DROP INDEX IF EXISTS public.destination CASCADE;
+CREATE INDEX destination ON public.trip
+USING hash
+(
+	destination
+)
+INCLUDE (destination);
 -- ddl-end --
 
 -- object: vehicle | type: CONSTRAINT --
