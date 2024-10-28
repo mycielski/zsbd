@@ -29,10 +29,12 @@ measured_refuelings AS (
 ),
 
 vehicle_refuelings AS (
-	select mr.refuel_timestamp timestamp,
-	mr.fuel_added,
-	v.number_plate vehicle_reg
-	from measured_refuelings mr join {{ source("eltrans", "vehicle") }} v on v.id=mr.vehicle_id
+  SELECT
+    mr.refuel_timestamp AS timestamp,
+    mr.fuel_added,
+    v.number_plate AS vehicle_reg
+  FROM measured_refuelings AS mr
+    JOIN {{ source("eltrans", "vehicle") }} AS v ON mr.vehicle_id = v.id
 )
 
 SELECT

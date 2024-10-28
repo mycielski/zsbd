@@ -20,9 +20,9 @@ named_hours AS (
     d.last_name,
     ah.hours_driven,
     ah.driver_id
-  FROM aggregate_hours ah
-  JOIN {{ source("eltrans", "driver") }} d
-    ON d.id=ah.driver_id
+  FROM aggregate_hours AS ah
+  INNER JOIN {{ source("eltrans", "driver") }} AS d
+    ON ah.driver_id = d.id
 )
 
 SELECT * FROM named_hours
