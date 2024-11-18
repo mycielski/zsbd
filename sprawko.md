@@ -292,4 +292,309 @@ W obu tabelach utworzono indeksy typu hash na kolumnach z numerami rejestracyjny
 Bez indeksu na kolumnie `timestamp` w `measurement` wykonanie zapytania `SELECT min(m.timestamp) FROM measurement m` zajmowało około 900 milisekund. Po dodaniu indeksu btree na tę kolumnę czas wykonania tego zapytania spadł do 12 milisekund! To redukcja o niemal **99%**!
 
 ---
+# Etap 2
+
+## Procedura do dodawania kierowców
+
+```sql
+CREATE OR REPLACE PROCEDURE add_driver(
+    p_first_name VARCHAR,
+    p_last_name VARCHAR,
+    p_is_active BOOLEAN DEFAULT true
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF p_first_name IS NULL OR p_last_name IS NULL THEN
+        RAISE EXCEPTION 'First name and last name cannot be null';
+    END IF;
+
+    INSERT INTO driver (first_name, last_name, is_active)
+    VALUES (p_first_name, p_last_name, p_is_active);
+END;
+$$;
+```
+
+![](obrazki/nowy_kierowca.png)
+
+## Funkcja `eur_to_pln`
+
+```sql
+CREATE OR REPLACE FUNCTION eur_to_pln(amount numeric) 
+RETURNS numeric 
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN ROUND(amount * 4.37, 2);
+END;
+$$;
+```
+
+![](obrazki/eur_to_pln.png)
+
+## Backup
+
+```shell
+PGPASSWORD=$POSTGRES_PASSWORD pg_dump -h 127.0.0.1 -p 5432 -U postgres -d eltrans > eltrans_backup_$(date +%Y%m%d).sql
+```
+
+Wykorzystałem program `pg_dump` do utworzenia kopii zapasowej mojej bazy danych. Poprawność utworzonej kopii zapasowej zweryfikowałem tworząc nowy klaster kubernetes (minikube), instalując tam Postgresa, a następnie wykonując plik .sql z kopią zapasową na tym Postgresie. 
+
+![](obrazki/backup_verify.png)
+
+## Złożona procedura
+
+```sql
+CREATE OR REPLACE PROCEDURE add_fuel_card(
+    p_driver_id integer,
+    p_vendor_id integer,
+    p_card_number varchar
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_driver_exists boolean;
+    v_is_active boolean;
+    v_card_exists boolean;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1 
+        FROM driver 
+        WHERE id = p_driver_id::smallint
+    ) INTO v_driver_exists;
+
+    IF NOT v_driver_exists THEN
+        RAISE EXCEPTION 'Driver with ID % does not exist', p_driver_id;
+    END IF;
+
+    SELECT is_active 
+    FROM driver 
+    WHERE id = p_driver_id::smallint 
+    INTO v_is_active;
+
+    IF NOT v_is_active THEN
+        RAISE EXCEPTION 'Driver with ID % is not active', p_driver_id;
+    END IF;
+
+    SELECT EXISTS (
+        SELECT 1
+        FROM card
+        WHERE owner_id = p_driver_id::smallint 
+        AND vendor_id = p_vendor_id::smallint
+    ) INTO v_card_exists;
+
+    IF v_card_exists THEN
+        RAISE EXCEPTION 'Driver % already has a fuel card with vendor %', p_driver_id, p_vendor_id;
+    END IF;
+
+    SELECT EXISTS (
+        SELECT 1
+        FROM card
+        WHERE number = p_card_number
+    ) INTO v_card_exists;
+
+    IF v_card_exists THEN
+        RAISE EXCEPTION 'Card number % is already in use', p_card_number;
+    END IF;
+
+    INSERT INTO card (number, owner_id, vendor_id)
+    VALUES (p_card_number, p_driver_id::smallint, p_vendor_id::smallint);
+    
+    RAISE NOTICE 'Successfully added new fuel card for driver %', p_driver_id;
+
+EXCEPTION
+    WHEN foreign_key_violation THEN
+        RAISE EXCEPTION 'Vendor with ID % does not exist', p_vendor_id;
+        
+    WHEN OTHERS THEN
+        RAISE EXCEPTION 'An unexpected error occurred: %', SQLERRM;
+END;
+$$;
+```
+
+Ta procedura dodaje nową kartę dla kierowcy. Sprawdza ona najpierw:
+
+- czy kierowca istnieje?
+- czy kierowca jest aktywny?
+- czy vendor istnieje? 
+- czy kierowca nie ma już karty u tego vendora?
+
+Wykorzystane są do tego tabele:
+
+- driver
+- card
+- vendor
+
+Procedura ma zaimplementowaną obsługę błędów. Przykład błędu związanego z dodaniem drugiej karty dla tego samego kierowcy u tego samego vendora:
+
+![](obrazki/vendor_card_duplicate.png)
+
+W Postgresie procedury domyślnie wykonują się w transakcji, nie trzeba tego implementować samodzielnie w samym kodzie procedury.
+
+## Trigger
+
+```sql
+CREATE OR REPLACE FUNCTION validate_fuel_type()
+RETURNS TRIGGER AS $$
+DECLARE
+    vehicle_fuel_type SMALLINT;
+BEGIN
+    SELECT v.fuel_type_id INTO vehicle_fuel_type
+    FROM trip t
+    JOIN vehicle v ON v.number_plate = t.vehicle
+    WHERE t.driver_id = (SELECT owner_id FROM card WHERE id = NEW.card_id)
+    ORDER BY t.start_time DESC 
+    LIMIT 1;
+
+    IF NEW.fuel_type_id != vehicle_fuel_type THEN
+        RAISE EXCEPTION 'Invalid fuel type for vehicle. Expected fuel type ID: %', vehicle_fuel_type;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER validate_fuel_type_trigger
+    BEFORE INSERT ON sale
+    FOR EACH ROW
+    WHEN (NEW.fuel_type_id IS NOT NULL)
+    EXECUTE FUNCTION validate_fuel_type();
+```
+
+Ten trigger uniemożliwia dodanie zakupu paliwa innego typu, niż przypisany do samochodu, którym porusza się dany kierowca.
+
+![](obrazki/trigger.png)
+
+## Różnica między dialektami SQL Postgres i MySQL
+
+1. Typy danych
+
+```sql
+-- PostgreSQL                    | MySQL
+TIMESTAMP WITH TIME ZONE        | DATETIME (brak stref czasowych)
+SERIAL                         | AUTO_INCREMENT
+VARCHAR bez limitu             | VARCHAR wymaga limitu
+NUMERIC/DECIMAL(p,s)           | DECIMAL(p,s) z mniej precyzyjnymi obliczeniami
+ARRAY                         | Brak natywnych tablic
+JSON, JSONB                    | JSON (przed MySQL 8.0 jako TEXT)
+```
+
+2. Funkcje
+
+```sql
+-- Konkatenacja stringów
+-- PostgreSQL
+SELECT 'Hello' || ' ' || 'World';
+
+-- MySQL
+SELECT CONCAT('Hello', ' ', 'World');
+
+-- Praca z datami
+-- PostgreSQL
+SELECT EXTRACT(EPOCH FROM timestamp_column);
+
+-- MySQL
+SELECT UNIX_TIMESTAMP(timestamp_column);
+```
+
+2. Triggery
+
+```sql
+-- PostgreSQL
+CREATE TRIGGER nazwa_triggera
+AFTER INSERT ON tabela
+FOR EACH ROW
+EXECUTE FUNCTION nazwa_funkcji();
+
+-- MySQL
+CREATE TRIGGER nazwa_triggera
+AFTER INSERT ON tabela
+FOR EACH ROW
+BEGIN
+    -- kod triggera bezpośrednio tutaj
+END;
+```
+
+- PostgreSQL wymaga osobnej funkcji dla triggera
+- MySQL zawiera kod triggera bezpośrednio w definicji
+- MySQL nie ma INSTEAD OF triggerów
+- PostgreSQL pozwala na triggery na widokach
+
+4. Sekwencje
+
+```sql
+-- PostgreSQL
+CREATE SEQUENCE seq_name;
+CREATE TABLE table_name (
+    id integer DEFAULT nextval('seq_name')
+);
+
+-- MySQL
+CREATE TABLE table_name (
+    id integer AUTO_INCREMENT
+);
+```
+
+Najważniejszą różnicą między Postgres a MySQL jest wykorzystanie wątków do obsługi połączeń z klientami w MySQL vs procesów w Postgres. Nie ma to jednak znaczenia dla nas przy migracji.
+
+## Wybrane narzędzia do migracji
+
+1. Airbyte
+
+- Obsługa ponad 350 źródeł i miejsc docelowych danych
+- Przyrostowa synchronizacja danych (przenosi tylko zmienione dane)
+- Elastyczna obsługa schematów danych
+- Możliwość budowania własnych konektorów
+- Dostępne jako open-source
+
+Wszechstronne narzędzie, szczególnie przydatne w przypadku złożonych migracji z wielu źródeł. Duża elastyczność dzięki możliwości tworzenia własnych konektorów.
+
+2. Azure Migrate
+
+- Dedykowane do migracji do chmury Azure
+- Centralna kontrola projektów migracji
+- Szacowanie kosztów migracji
+- Optymalizacja wydajności w środowisku Azure
+- Wiele dostępnych źródeł danych
+
+Dobre narzędzie jeśli ktoś pracuje z Azure. Niestety płatne, ale za to daje dużo informacji o szacowanych kosztach.
+
+3. AWS Database Migration Service
+
+- Ciągła replikacja danych
+- Albo batchowa
+- Pełna integracja z usługami AWS
+- Wiele dostępnych źródeł danych
+
+Podobnie jak rozwiązanie od Azure, tylko w świecie AWS. 
+
+## Migracja
+
+### MySQL Workbench
+
+Próba migracji przy użyciu narzędzia MySQL Workbench zakończyła się niepowodzeniem, zarówno na MacOS, NixOS, Ubuntu i Windows 10.
+
+![](obrazki/workbench.png)
+
+### Airbyte
+
+Drugą próbę podjąłem przy użyciu narzędzia Airbyte. Zainstalowałem Airbyte na swoim komputerze i skonfigurowałem dostęp do obu RDBMSów. Migracja przy użyciu Airbyte jest czasochłonna -- moja baza miała niecałe $400 000$ rekordów i ważyła 33.5 MB, a jej migracja zajęła ponad 28 minut! Prawdopodobnie ze względu na niskowydajny sprzęt na którym są bazy. Na szczęście migracja jest dość prosta. Nie miałem żadnych problemów ze zmigrowaniem danych pomiędzy RDBMSami.
+
+Dashboard Airbyte w trakcie migracji:
+
+![](obrazki/airbyte.png)
+
+Informacja o udanej migracji:
+
+![](obrazki/airbyte_success.png)
+
+Liczba pomiarów poziomu paliwa w docelowym RDBMS jest poprawna:
+
+![](obrazki/airbyte_measurements.png)
+
+#### Database link
+
+Przy użyciu Airbyte zrealizowałem także replikację danych co godzinę (choć da się nawet co minutę).
+
+![](obrazki/hourly.png)
 

@@ -1,0 +1,3 @@
+postgres
+mysql
+abctl (tam byl tez brew tap aribytehq)
