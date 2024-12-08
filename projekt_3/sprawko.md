@@ -8,8 +8,7 @@ Zbiór danych dotyczący meczy piłkarskich. Każdy mecz ma wiele zdarzeń, co p
 
 ## Instalacja
 
-Baza została zainstalowana lokalnie na moim laptopie jako kontener Dockerowy.
-![](obrazki/instalacja_1.png)
+Baza została zainstalowana w AWS, korzystając z rozwiązania Atlas od MongoDB.
 
 ## Upload danych do bazy
 
@@ -33,7 +32,7 @@ player_valuations = pd.read_csv(os.path.join(path, "player_valuations.csv"))
 players = pd.read_csv(os.path.join(path, "players.csv"))
 
 
-client = MongoClient("mongodb://admin:password@localhost:27017/")
+client = MongoClient(os.getenv("MONGO_CONN_STR")
 assert client.server_info()["ok"] == 1
 
 db = client["football_data"]
@@ -80,3 +79,111 @@ Dane zostały zagnieżdżone w następujący sposób:
 ```
 
 Zagnieżdżenie `events` i `lineups` w grach ma sens, ponieważ są one nierozłącznie powiązane z grami. `players` nie zostało zagnieżdżone w `clubs` ponieważ gracze mogą zmieniać kluby. `valuations` zostało zagnieżdżone w `players`, ponieważ wycena jest związana nierozłącznie z zawodnikiem.
+
+### Zagnieżdżone dane
+
+Przykład zagnieżdżenia `lineup` w `game`:
+
+![](obrazki/zagniezdzenie_1.png)
+
+### Referencja
+
+Poniższe zapytanie liczy sumę wartości wszystkich zawodników grających w danym meczu.
+
+```json
+{
+        "$lookup": {
+            "from": "players",
+            "localField": "lineup.player_id",
+            "foreignField": "player_id",
+            "pipeline": [
+                {"$project": {"market_value_in_eur": 1, "_id": 0}}
+            ],
+            "as": "player"
+        }
+    },
+    {
+        "$set": {
+            "total_market_value": {
+                "$sum": {
+                    "$map": {
+                        "input": "$player",
+                        "as": "p",
+                        "in": "$$p.market_value_in_eur"
+                    }
+                }
+            }
+        }
+    },
+    {
+        "$limit": 100
+}
+```
+
+![](obrazki/total_market_value.png)
+
+## Analiza wydajności indeksów
+
+Będę wykonywał poniższą kwerendę i sprawdzał jak na jej czas wykonania wpływa zakładanie indeksów.
+
+```json
+{
+  $expr: { $gte: [{ $add: ["$home_club_goals", "$away_club_goals"] }, 6] }
+}
+```
+
+### Bez indeksów
+
+![](obrazki/indeks_1.png)
+
+### Z indeksem na `away_club_goals`
+
+![](obrazki/indeks_2.png)
+
+### Z indeksami na `away_club_goals` i `home_club_goals`
+
+![](obrazki/indeks_3.png)
+
+## Autoinkrementacja
+
+### Zaimplementowana za pomocą funkcji
+
+![](obrazki/autoinkrementacja_1.png)
+
+## MapReduce
+
+Próbowałem wykorzystać `mapReduce`, ale otrzymałem komunikat:
+
+```
+DeprecationWarning: Collection.mapReduce() is deprecated. Use an aggregation instead.
+```
+
+Wykorzystałem zatem agregację do policzenia ile goli zostało strzelonych:
+
+![](obrazki/aggregate_1.png)
+
+## Autoinkrementacja
+
+Stworzyłem trigger w bazie, który wywołuje poniższą funkcję.
+
+```javascript
+exports = async function(changeEvent) {
+    var docId = changeEvent.fullDocument._id;
+    
+    const countercollection = context.services.get("Cluster0").db(changeEvent.ns.db).collection("counters");
+    const playerscollection = context.services.get("Cluster0").db(changeEvent.ns.db).collection(changeEvent.ns.coll);
+    
+    var counter = await countercollection.findOneAndUpdate({_id: changeEvent.ns },{ $inc: { seq_value: 1 }}, { returnNewDocument: true, upsert : true});
+    var updateRes = await playerscollection.updateOne({_id : docId},{ $set : {autoincrementCounter : counter.seq_value}});
+    
+    console.log(`Updated ${JSON.stringify(changeEvent.ns)} with counter ${counter.seq_value} result : ${JSON.stringify(updateRes)}`);
+    };
+```
+
+### Prezentacja działania
+
+Najpierw dodaję trzech nowych graczy:
+![](obrazki/autoinkrementacja_2.png)
+
+Potem sprawdzam ich liczniki:
+![](obrazki/autoinkrementacja_3.png)

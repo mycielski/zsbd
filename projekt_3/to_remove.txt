@@ -1,2 +1,3 @@
 mongocli
 mongodb-compass
+mongosh
