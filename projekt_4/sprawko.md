@@ -1,8 +1,20 @@
 # Projekt 4 -- Neo4j
 
 ## Instalacja
-Wykorzystałem oficjalny obraz Neo4j z Dockerhub.
-![](obrazki/install.png)
+Wykorzystałem oficjalny obraz Neo4j z Dockerhub, który uruchomiłem tą komendą:
+```shell
+$ docker run \
+    --publish=7474:7474 --publish=7687:7687 \
+    --volume=$HOME/neo4j/data:/data \
+    --memory=8g \
+    --env NEO4J_db_memory_transaction_total_max=4G \
+    -e NEO4J_apoc_export_file_enabled=true \
+    -e NEO4J_apoc_import_file_enabled=true \
+    -e NEO4J_apoc_import_file_use__neo4j__config=true \
+    -e NEO4J_PLUGINS='["apoc"]' \
+    neo4j
+```
+Odbyło się to bez żadnych problemów.
 
 ## Zbiory danych
 Do realizacji zadania wykorzystałem zbiory danych ze strony [openflights.org](https://openflights.org/):
@@ -29,16 +41,23 @@ Typy węzłów utworzone z tych zbiorów:
 Typy relacji pomiędzy zbiorami:
 
 - BASED\_FROM
+    - W jakim kraju dana linia lotnicza ma swoją siedzibę.
 - IN\_TIMEZONE
+    - Z której strefy czasowej dane miasto/lotnisko.
 - LOCATED\_IN
+    - Gdzie znajduje się dane miasto/lotnisko.
 - OPERATES
+    - Jakie samoloty obsługuje dana linia lotnicza.
 - FLIGHT\_TO
+    - Połączenia lotnicze istniejące między lotniskami.
 
 Łącznie $23486$ relacji.
 
 ### Schemat danych
 
 ![](obrazki/schema.png)
+
+**Cały kod wykorzystany do załadowania danych i utworzenia relacji dostępny jest w serwisie GitHub pod adresem [https://github.com/mycielski/zsbd/blob/main/projekt_4/import.ipynb](https://github.com/mycielski/zsbd/blob/main/projekt_4/import.ipynb).**
 
 ## Przykład tworzenia węzłów i połączeń
 
@@ -286,7 +305,12 @@ t2.iata as To,
 └─────┴─────┴───────────────┘
 ```
 
-5. Połączenie `MERGE` miasta ze stref
+5. Połączenie `MERGE` miasta ze strefą czasową.
+```sql
+MATCH (c:City {name: $city}),
+      (tz:Timezone {name: $timezone})
+MERGE (c)-[:IN_TIMEZONE]->(tz)
+```
 
 ## Funkcje przestrzenne
 
@@ -332,3 +356,52 @@ RETURN reduce(total = 0, r IN relationships(p) | total + r.distance)/1000 AS res
 Domyślnie Neo4j używa szybkiego dwukierunkowego algorytmu BFS ($O(V+E)$) do znalezienia najkrótszej ścieżki[1](https://neo4j.com/docs/cypher-manual/current/appendix/tutorials/shortestpath-planning/), są natomiast dostępne inne algorytmy, takie jak Dijkstra czy A*.
 
 Istotną zaletą wykorzystania danych przestrzennych jest możliwość wykorzystania funkcji Neo4j do obliczania odległości między węzłami. Nie musimy implementować logiki samodzielnie, wystarczy wywołać wbudowaną funkcję `point.distance`.
+
+## Indeksy
+
+Neo4j wspiera dwa typy indeksów -- Search-performance i Semantic[2](https://neo4j.com/docs/cypher-manual/current/indexes/).
+Zdecydowałem się na wykorzystanie indeksów search-performance aby usprawnić wyszukiwanie węzłów na podstawie ich atrybutów.
+
+### Które popularne lotniska (minimum 30 połączeń) nie są ze sobą połączone?
+Utworzone indeksy:
+```python
+with driver.session() as session:
+    session.run("""
+    CREATE INDEX terminal_details IF NOT EXISTS
+    FOR (t:Terminal)
+    ON (t.name, t.iata, t.location)
+    """)
+    session.run("""
+    CREATE INDEX flight_source IF NOT EXISTS
+    FOR ()-[r:FLIGHT_TO]->()
+    ON (r.source)
+    """)
+    session.run("""
+    CREATE INDEX flight_destination IF NOT EXISTS
+    FOR ()-[r:FLIGHT_TO]->()
+    ON (r.destination)
+    """)
+```
+- Przed stworzeniem indeksów: $0.003$ sekundy na zapytanie
+- Po stworzeniu indeksów: $0.0018$ sekundy na zapytanie
+
+### Które linie lotnicze mają najbardziej zróżnicowane floty?
+
+Utworzone indeksy:
+```python
+with driver.session() as session:
+    session.run("""
+CREATE INDEX airline_details IF NOT EXISTS
+FOR (a:Airline)
+ON (a.name, a.iata)
+""")
+    session.run("""
+CREATE INDEX plane_type_name IF NOT EXISTS
+FOR (p:PlaneType)
+ON (p.name)
+""")
+```
+- Przed stworzeniem indeksów: $0.005$ sekundy na zapytanie
+- Po stworzeniu indeksów: $0.002$ sekundy na zapytanie
+
+**Kod wykorzystany do benchmarkowania zapytań dostępny jest w serwisie GitHub pod adresem [https://github.com/mycielski/zsbd/blob/main/projekt_4/bench.ipynb](https://github.com/mycielski/zsbd/blob/main/projekt_4/bench.ipynb).**
