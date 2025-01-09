@@ -1,11 +1,14 @@
 # Projekt 4 -- Neo4j
 
+**Cały kod utworzony przy realizacji zadania dostępny jest w serwisie GitHub pod adresem [https://github.com/mycielski/zsbd/tree/main/projekt_4](https://github.com/mycielski/zsbd/tree/main/projekt_4).**
+
 ## Instalacja
 Wykorzystałem oficjalny obraz Neo4j z Dockerhub, który uruchomiłem tą komendą:
 ```shell
 $ docker run \
     --publish=7474:7474 --publish=7687:7687 \
     --volume=$HOME/neo4j/data:/data \
+    --volume=$HOME/neo4j/plugins:/plugins \
     --memory=8g \
     --env NEO4J_db_memory_transaction_total_max=4G \
     -e NEO4J_apoc_export_file_enabled=true \
@@ -405,3 +408,300 @@ ON (p.name)
 - Po stworzeniu indeksów: $0.002$ sekundy na zapytanie
 
 **Kod wykorzystany do benchmarkowania zapytań dostępny jest w serwisie GitHub pod adresem [https://github.com/mycielski/zsbd/blob/main/projekt_4/bench.ipynb](https://github.com/mycielski/zsbd/blob/main/projekt_4/bench.ipynb).**
+
+Utworzone indeksy są typu range. Indeks jest kopią danych z bazy, wraz ze ścieżką dostępu do oryginalnych danych[3](https://neo4j.com/docs/cypher-manual/current/indexes/).
+
+Na moich zbiorach danych warto byłoby stworzyć także indeksy na kodach IATA i ICAO, ponieważ te często są wykorzystywane do jednoznacznej identyfikacji samolotów, linii i lotnisk.
+
+
+## APOC
+
+Wykorzystałem algorytm Dijkstry dostępny w APOC do znalezienia najkrótszej ścieżki między dwoma lotniskami.
+
+![](obrazki/apoc.png)
+
+## Stored procedure
+
+Aby zademnostrować wykorzystanie stored procedure w Neo4j, stworzyłem prostą procedurę, która zwraca listę linii lotniczych.
+
+```java
+package org.example;
+
+import org.neo4j.graphdb.Label;
+import org.neo4j.graphdb.Transaction;
+import org.neo4j.procedure.Context;
+import org.neo4j.procedure.Description;
+import org.neo4j.procedure.Procedure;
+
+import java.util.stream.Stream;
+
+public class GetAirlines {
+    @Context
+    public Transaction txn;
+
+    public static class JourneyResult {
+        public String alias;
+
+        public JourneyResult(String alias) {
+            this.alias = alias;
+        }
+
+    }
+
+    @Procedure(name="org.example.getAirlines")
+    @Description("Returns airlines from the database")
+    public Stream<JourneyResult> getAirlines() {
+        return txn.findNodes(Label.label("Airline")).stream()
+                .map(node -> new JourneyResult((String) node.getProperty("alias")));
+    }
+
+}
+```
+pom.xml
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.example</groupId>
+    <artifactId>stored_proc</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.neo4j.driver</groupId>
+            <artifactId>neo4j-java-driver</artifactId>
+            <version>5.26.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j</artifactId>
+            <version>5.26.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>procedure-compiler</artifactId>
+            <version>5.26.0</version>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+
+                <plugin>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>3.2.2</version>
+                    <executions>
+                        <execution>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>shade</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+</project>
+```
+
+Można ją wywołać w ten sposób:
+```sql
+CALL org.example.getAirlines;
+```
+```text
+╒═════════════════════════════╕
+│alias                        │
+╞═════════════════════════════╡
+│"ANA All Nippon Airways"     │
+├─────────────────────────────┤
+│"Air Asia"                   │
+├─────────────────────────────┤
+│"Pulkovo Aviation Enterprise"│
+├─────────────────────────────┤
+│"bmi British Midland"        │
+├─────────────────────────────┤
+│"SN Brussels Airlines"       │
+├─────────────────────────────┤
+│"Contactair"                 │
+├─────────────────────────────┤
+│"CSA Czech Airlines"         │
+├─────────────────────────────┤
+│"Emirates Airlines"          │
+├─────────────────────────────┤
+│"EasyJet Airline"            │
+├─────────────────────────────┤
+│"FlyAsianXpress"             │
+├─────────────────────────────┤
+│"TACA"                       │
+├─────────────────────────────┤
+│"Horizon Airlines"           │
+├─────────────────────────────┤
+│"JAL Japan Airlines"         │
+├─────────────────────────────┤
+│"Pacific Airlines"           │
+├─────────────────────────────┤
+│"PIA Pakistan International" │
+├─────────────────────────────┤
+│"Qantas Airways"             │
+├─────────────────────────────┤
+│"SAA South African Airways"  │
+├─────────────────────────────┤
+│"SAS Scandinavian Airlines"  │
+├─────────────────────────────┤
+│"Sibir Airlines"             │
+├─────────────────────────────┤
+│"SkyWork"                    │
+├─────────────────────────────┤
+│"Swiss Airlines"             │
+├─────────────────────────────┤
+│"TAP Air Portugal"           │
+├─────────────────────────────┤
+│"Thai Air Asia"              │
+├─────────────────────────────┤
+│"Turkmenhovayollary"         │
+├─────────────────────────────┤
+│"TWA"                        │
+├─────────────────────────────┤
+│"Varig"                      │
+├─────────────────────────────┤
+│"SkyExpress"                 │
+├─────────────────────────────┤
+│"now Jetairlfy"              │
+├─────────────────────────────┤
+│"Braathens SAFE"             │
+├─────────────────────────────┤
+│"Avialinii 400"              │
+├─────────────────────────────┤
+│"Epic Holidays"              │
+├─────────────────────────────┤
+│"Dennis Sky Holding"         │
+├─────────────────────────────┤
+│"WEA"                        │
+├─────────────────────────────┤
+│"BRAZIL AIR"                 │
+├─────────────────────────────┤
+│"Kreta Sky"                  │
+├─────────────────────────────┤
+│"SOCHI"                      │
+├─────────────────────────────┤
+│"Tom\\'s air"                │
+├─────────────────────────────┤
+│"slowbird"                   │
+├─────────────────────────────┤
+│"lionXpress"                 │
+├─────────────────────────────┤
+│"Domenican"                  │
+├─────────────────────────────┤
+│"Russian. Yours Air Lines "  │
+├─────────────────────────────┤
+│"Baikal Airlines"            │
+├─────────────────────────────┤
+│"MARYSYA AIRLINES"           │
+├─────────────────────────────┤
+│"ZABAIKAL "                  │
+├─────────────────────────────┤
+│"Fly Brasil"                 │
+├─────────────────────────────┤
+│"Himalaya"                   │
+├─────────────────────────────┤
+│"Indya1"                     │
+├─────────────────────────────┤
+│"Air Canada Express"         │
+├─────────────────────────────┤
+│"Moskva-air"                 │
+├─────────────────────────────┤
+│"Air luch"                   │
+├─────────────────────────────┤
+│"Mongol Air "                │
+├─────────────────────────────┤
+│"NEXT"                       │
+├─────────────────────────────┤
+│"Sovet Air "                 │
+├─────────────────────────────┤
+│"USky"                       │
+├─────────────────────────────┤
+│"Marusya Air"                │
+├─────────────────────────────┤
+│"RussianConector"            │
+├─────────────────────────────┤
+│"Indus Airlines Pak"         │
+├─────────────────────────────┤
+│"Samurai Airlines (DUMMY)"   │
+├─────────────────────────────┤
+│"AirOne Continental"         │
+├─────────────────────────────┤
+│"AirOne Polska"              │
+├─────────────────────────────┤
+│"Javi"                       │
+├─────────────────────────────┤
+│"Zenith"                     │
+├─────────────────────────────┤
+│"Orbit Azerbaijan"           │
+├─────────────────────────────┤
+│"Royal Inc."                 │
+├─────────────────────────────┤
+│"CheapFlying"                │
+├─────────────────────────────┤
+│"Royal Southern"             │
+├─────────────────────────────┤
+│"Sochi Air "                 │
+├─────────────────────────────┤
+│"Tramm Airlines"             │
+├─────────────────────────────┤
+│"Maryland"                   │
+├─────────────────────────────┤
+│"Apache"                     │
+├─────────────────────────────┤
+│"Jettor"                     │
+├─────────────────────────────┤
+│"XPTO  "                     │
+├─────────────────────────────┤
+│"Air Lituanica"              │
+├─────────────────────────────┤
+│"Rainbow Air (RAI)"          │
+├─────────────────────────────┤
+│"Rainbow Air CAN"            │
+├─────────────────────────────┤
+│"Rainbow Air POL"            │
+├─────────────────────────────┤
+│"Rainbow Air EU"             │
+├─────────────────────────────┤
+│"Rainbow Air US"             │
+├─────────────────────────────┤
+│"Добролёт"                   │
+├─────────────────────────────┤
+│"Aero Spike"                 │
+├─────────────────────────────┤
+│"ADLER EXPRESS"              │
+├─────────────────────────────┤
+│"Encore"                     │
+├─────────────────────────────┤
+│"All America BOPY"           │
+├─────────────────────────────┤
+│"Russian Commuter "          │
+└─────────────────────────────┘
+```
+
+Najważniejsza różnica między procedurami w bazach SQL a Neo4j, to że w Neo4j piszemy je w Javie, a nie w języku używanym do tworzenia zapytań (SQL lub Cypher).
+Ponadto, po napisaniu procedury dla Neo4j należy ją skompilować do pliku `jar` a następnie umieścić w katalogu `plugins`. Neo4j musi wtedy zostać zrestartowany, aby zobaczył nową procedurę i mógł z niej skorzystać.
+Zastosowania procedur w Neo4j są nieskończone, ogranicza nas jedynie nasza wyobraźnia i umiejętności programowania w Javie.
+
+## Końcowa analiza zbioru danych
+
+W produkcyjnej bazie przechowującej informacje o lotach warto byłoby rozłożyć bazę na kilka maszyn.
+Na jednej maszynie wówczas znalazłyby się na przykład loty dotyczące jednej linii lotniczej.
